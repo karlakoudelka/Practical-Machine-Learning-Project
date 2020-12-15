@@ -1,0 +1,134 @@
+---
+title: "Machine Learning"
+author: "karla"
+date: "12/9/2020"
+output: html_document
+---
+## Background
+This is the course project for the Coursera Practical Machine Learning class. Methods detailed in this report will be similar to those discussed during the course and using the training data provided will include decision trees, random forests, gradient boosted trees, and support vector machines. Predictions will be developed using the provided test set to obtain the accuracy and the out of sample error rates for each model. Using this information, the best model will be determined. 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: 
+
+  1. exactly according to the specification (Class A), 
+  2. throwing the elbows to the front (Class B), 
+  3. lifting the dumbbell only halfway (Class C), 
+  4. lowering the dumbbell only halfway (Class D) and 
+  5. throwing the hips to the front (Class E).
+
+
+## Libraries and Data 
+First, all required libraries for the analysis will be loaded, followed by the data sets.  More information on the data set provided is available at http://groupware.les.inf.puc-rio.br/har.
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+library(kernlab)
+library(ggplot2)
+library(rattle)
+library(randomForest)
+
+#First, determine if the files exist in the working directory. If not, download the files. 
+
+#if(!file.exists("./data/pml-training.csv")){
+#    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")}
+#if(!file.exists("./data/pml-testing.csv")){
+#    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")}
+
+training<-read.csv("pml-training.csv")
+testing<-read.csv("pml-testing.csv")
+dim(training); dim(testing)
+table(training$classe)
+```
+From the above information, we can see that the training set consists of 19622 records, the testing set consists of 20 records, and both contain 160 variables.  We can also see that the distribution for variable of interest, the "classe" variable.  
+
+
+## Data review and preprocessing
+First, with 160 variables we should clean up the data and remove columns with mostly NAs, remove the metadata information and remove near zero variance variables.  
+```{r}
+# Remove columns with mostly NAs
+training<-training[,colMeans(is.na(training)) < .9] 
+
+# Remove metadata columns
+training<-training[,-c(1:7)]
+
+# Removing near zero variance variables
+nzv<-nearZeroVar(training)
+training<-training[,-nzv]
+dim(training)
+
+# Create training and validation subsets
+inTrain<-createDataPartition(y=training$classe, p=0.7, list=FALSE)
+training.subset<-training[inTrain,]
+valid.subset<-training[-inTrain,]
+```
+Now, with our training data tidied up and subsets created for model training and validation, we can move on to model formulation and testing.
+
+## Model development and review
+### Decision Tree
+The first model we evaluate is the decision tree, with the model developed, predictions forecasted and the accuracy detailed below.  
+```{r}
+# Create model
+mod.trees<-train(classe~., data=training.subset, method="rpart")
+fancyRpartPlot(mod.trees$finalModel)
+# Develop predictions and calculate confusion matrix and accuracy
+pred.trees<-predict(mod.trees, valid.subset)
+cm.trees<-confusionMatrix(pred.trees, factor(valid.subset$classe))
+cm.trees
+```
+
+### Random Forest
+Next, a random forest model will be evaluated, with the model developed, predictions forecasted and the accuracy detailed below. 
+```{r}
+# Create model
+control <- trainControl(method="cv", number=3, verboseIter=F)
+mod.rf<-randomForest(classe~., data=training.subset, method="rf",  trControl=control, tuneLength = 5, prox=TRUE)
+# Develop predictions and calculate confusion matrix and accuracy
+pred.rf<-predict(mod.rf, valid.subset)
+cm.rf<-confusionMatrix(pred.rf, factor(valid.subset$classe))
+cm.rf
+```
+
+### Gradient Boosted Trees
+Next, a gradient boosted model will be evaluated, with the model developed, predictions forecasted and the accuracy detailed below. 
+```{r}
+# Create model
+mod.gbm<-train(classe~., data=training.subset, method="gbm",  verbose=FALSE)
+# Develop predictions and calculate confusion matrix and accuracy 
+pred.gbm<-predict(mod.gbm, valid.subset)
+cm.gbm<-confusionMatrix(pred.gbm, factor(valid.subset$classe))
+cm.gbm
+```
+
+### Support Vector Machines
+Finally, a support vector machine model will be evaluated, with the model developed, predictions forecasted and the accuracy detailed below. 
+```{r}
+# Create model
+mod.svm<-train(classe~., data=training.subset, method="svmLinear", verbose=FALSE)
+# Develop predictions and calculate confusion matrix and accuracy 
+pred.svm<-predict(mod.svm, valid.subset)
+cm.svm<-confusionMatrix(pred.svm, factor(valid.subset$classe))
+cm.svm
+```
+
+## Model Comparisons and conclusions
+When looking at the accuracy across all 4 model types, we can see that the accuracy is highest for the Random Forest model.
+```{r}
+cm.trees$overall[1]
+cm.rf$overall[1]
+cm.gbm$overall[1]
+cm.svm$overall[1]
+```
+
+## Applying the best model to the test data
+The Random Forest model is applied to predict the 20 test data set results as shown below. 
+```{r}
+predict.testing<-predict(mod.rf, newdata=testing)
+predict.testing
+```
